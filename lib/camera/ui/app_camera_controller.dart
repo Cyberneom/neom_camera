@@ -10,20 +10,15 @@ import 'package:neom_core/core/data/implementations/user_controller.dart';
 import 'package:neom_core/core/domain/model/app_profile.dart';
 import 'package:neom_core/core/utils/constants/core_constants.dart';
 import 'package:neom_core/core/utils/enums/user_role.dart';
-import 'package:video_player/video_player.dart';
-
-import '../posts/ui/upload/post_upload_controller.dart';
 
 class AppCameraController extends GetxController {
 
   final userController = Get.find<UserController>();
-  PostUploadController uploadController = Get.find<PostUploadController>();
   AppProfile profile = AppProfile();
 
   CameraController? controller;
   XFile? imageFile;
   XFile? videoFile;
-  VideoPlayerController? videoController;
   VoidCallback? videoPlayerListener;
 
   RxBool enableAudio = true.obs;
@@ -54,12 +49,7 @@ class AppCameraController extends GetxController {
 
       onSetFlashModeButtonPressed(FlashMode.off);
 
-      if (Get.isRegistered<PostUploadController>()) {
-        uploadController = Get.find<PostUploadController>();
-      } else {
-        uploadController = PostUploadController();
-        Get.put(uploadController);
-      }
+
     } catch (e) {
       AppConfig.logger.e(e.toString());
     }
@@ -71,8 +61,6 @@ class AppCameraController extends GetxController {
     super.onReady();
 
     try {
-      ///DEPRECATED
-      ///verifyVideosPerWeekLimit();
     } catch (e) {
       AppConfig.logger.e(e.toString());
     }
@@ -145,7 +133,7 @@ class AppCameraController extends GetxController {
               ? AppColor.mystic : AppColor.yellow,
           onPressed: controller != null ? onFlashModeButtonPressed : null,
         ),
-        if (uploadController.userController.user.isVerified) IconButton(
+        if (userController.user.isVerified) IconButton(
           icon: Icon(enableAudio.value ? Icons.volume_up : Icons.volume_mute),
           color: enableAudio.value ? AppColor.mystic : AppColor.yellow,
           onPressed: controller != null ? onAudioModeButtonPressed : null,
@@ -236,17 +224,13 @@ class AppCameraController extends GetxController {
   }
 
   void onTakePictureButtonPressed() {
-    takePicture().then((XFile? file) {
+    takePicture().then((XFile? xfile) {
       if (mounted) {
-        imageFile = file;
-        videoController?.dispose();
-        videoController = null;
+        imageFile = xfile;
       }
 
-      if (file != null) {
-        AppConfig.logger.i('Picture saved to ${file.path}');
-        uploadController.handleImage(imageFile: file);
-      }
+      if (xfile != null) AppConfig.logger.i('Picture saved to ${xfile.path}');
+      Get.back(result: xfile);
     });
   }
 
@@ -318,15 +302,13 @@ class AppCameraController extends GetxController {
   void onStopButtonPressed() {
     isRecording.value = false;
 
-    stopVideoRecording().then((XFile? file) {
+    stopVideoRecording().then((XFile? xfile) {
       if (mounted) {
         update();
       }
 
-      if (file != null) {
-        AppConfig.logger.i('Video recorded to ${file.path}');
-        uploadController.handleVideo(videoFile: file);
-      }
+      if (xfile != null) AppConfig.logger.i('Video recorded to ${xfile.path}');
+      Get.back(result: xfile);
     });
   }
 
@@ -383,7 +365,7 @@ class AppCameraController extends GetxController {
     try {
       await cameraController.startVideoRecording();
 
-      int maxDurationInSeconds = uploadController.userController.user.userRole == UserRole.subscriber
+      int maxDurationInSeconds = userController.user.userRole == UserRole.subscriber
           ? CoreConstants.verifiedMaxVideoDurationInSeconds : CoreConstants.adminMaxVideoDurationInSeconds;
       Duration duration = Duration(seconds: maxDurationInSeconds);
       Timer(duration, () async {

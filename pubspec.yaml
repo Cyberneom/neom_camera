@@ -1,7 +1,7 @@
-name: neom_posts
-description: Post creation and view for Open Neom.
-version: 1.4.0
-homepage: https://github.com/Cyberneom/neom_posts
+name: neom_camera
+description: Camera functionality for Open Neom
+version: 1.0.0
+homepage: https://github.com/Cyberneom/neom_camera
 publish_to: 'none'
 
 environment:
@@ -18,25 +18,8 @@ dependencies:
   neom_commons:
     git:
       url: git@github.com:Cyberneom/neom_commons.git
-  neom_timeline:
-    git:
-      url: git@github.com:Cyberneom/neom_timeline.git
 
   camera: ^0.11.1
-  photo_manager: ^3.7.1
-  fraction: ^5.0.5
-
-  #Post with only text
-  auto_size_text_field: ^2.2.4
-
-  video_editor: ^3.0.0
-  easy_video_editor: ^0.1.2
-
-  file_picker: ^10.1.9
-  image_picker: ^1.1.2
-  image_cropper: ^9.1.0
-  flutter_image_compress: ^2.4.0
-  video_compress: ^3.1.4
 
 dev_dependencies:
   flutter_test:

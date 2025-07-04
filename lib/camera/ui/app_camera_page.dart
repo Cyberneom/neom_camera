@@ -30,7 +30,6 @@ class AppCameraPage extends StatelessWidget {
       ),
       backgroundColor: AppColor.main50,
       body: SizedBox(
-        // height: AppTheme.fullHeight(context),
         child: Obx(()=> _.isLoading.value ? AppCircularProgressIndicator() : Stack(
         alignment: Alignment.center,
         children: [
@@ -61,13 +60,13 @@ class AppCameraPage extends StatelessWidget {
                   }
                 },
                 onLongPress: () {
-                  if((_.uploadController.userController.user.isVerified) && _.controller != null
+                  if((_.userController.user.isVerified) && _.controller != null
                       && _.controller!.value.isInitialized && !_.controller!.value.isRecordingVideo) {
                     _.onVideoRecordButtonPressed();
                   }
                 },
                 onLongPressEnd: (details) {
-                  if((_.uploadController.userController.user.isVerified) && _.controller != null
+                  if((_.userController.user.isVerified) && _.controller != null
                       && _.controller!.value.isInitialized && _.controller!.value.isRecordingVideo) {
                     _.onStopButtonPressed();
                   }
