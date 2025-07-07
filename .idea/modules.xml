@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/neom_posts.iml" filepath="$PROJECT_DIR$/.idea/neom_posts.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/neom_camera.iml" filepath="$PROJECT_DIR$/.idea/neom_camera.iml" />
     </modules>
   </component>
 </project>

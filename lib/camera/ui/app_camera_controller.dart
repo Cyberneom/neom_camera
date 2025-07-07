@@ -8,10 +8,11 @@ import 'package:neom_commons/commons/utils/app_utilities.dart';
 import 'package:neom_core/core/app_config.dart';
 import 'package:neom_core/core/data/implementations/user_controller.dart';
 import 'package:neom_core/core/domain/model/app_profile.dart';
+import 'package:neom_core/core/domain/use_cases/camera_service.dart';
 import 'package:neom_core/core/utils/constants/core_constants.dart';
 import 'package:neom_core/core/utils/enums/user_role.dart';
 
-class AppCameraController extends GetxController {
+class AppCameraController extends GetxController implements AppCameraService {
 
   final userController = Get.find<UserController>();
   AppProfile profile = AppProfile();
@@ -72,6 +73,7 @@ class AppCameraController extends GetxController {
     controller?.dispose();
   }
 
+  @override
   Future<void> initializeCameraController() async {
     try {
       cameras = await availableCameras();
@@ -142,6 +144,7 @@ class AppCameraController extends GetxController {
     );
   }
 
+  @override
   void onViewFinderTap(TapDownDetails details, BoxConstraints constraints) {
     if (controller == null) {
       return;
@@ -157,6 +160,7 @@ class AppCameraController extends GetxController {
     cameraController.setFocusPoint(offset);
   }
 
+  @override
   Future<void> onNewCameraSelected(CameraDescription cameraDescription) async {
     if (controller != null) {
       return controller!.setDescription(cameraDescription);
@@ -223,6 +227,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   void onTakePictureButtonPressed() {
     takePicture().then((XFile? xfile) {
       if (mounted) {
@@ -234,6 +239,7 @@ class AppCameraController extends GetxController {
     });
   }
 
+  @override
   void onFlashModeButtonPressed() {
 
     FlashMode flashMode = FlashMode.off;
@@ -268,7 +274,7 @@ class AppCameraController extends GetxController {
     onSetFlashModeButtonPressed(flashMode);
   }
 
-
+  @override
   void onAudioModeButtonPressed() {
     enableAudio.value = !enableAudio.value;
 
@@ -289,6 +295,7 @@ class AppCameraController extends GetxController {
     });
   }
 
+  @override
   void onVideoRecordButtonPressed() {
     isRecording.value = true;
 
@@ -299,6 +306,7 @@ class AppCameraController extends GetxController {
     });
   }
 
+  @override
   void onStopButtonPressed() {
     isRecording.value = false;
 
@@ -331,6 +339,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   void onPauseButtonPressed() {
     pauseVideoRecording().then((_) {
       if (mounted) {
@@ -340,6 +349,7 @@ class AppCameraController extends GetxController {
     });
   }
 
+  @override
   void onResumeButtonPressed() {
     resumeVideoRecording().then((_) {
       if (mounted) {
@@ -349,6 +359,7 @@ class AppCameraController extends GetxController {
     });
   }
 
+  @override
   Future<void> startVideoRecording() async {
     final CameraController? cameraController = controller;
 
@@ -380,6 +391,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   Future<XFile?> stopVideoRecording() async {
     final CameraController? cameraController = controller;
 
@@ -395,6 +407,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   Future<void> pauseVideoRecording() async {
     final CameraController? cameraController = controller;
 
@@ -410,6 +423,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   Future<void> resumeVideoRecording() async {
     final CameraController? cameraController = controller;
 
@@ -425,6 +439,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   Future<void> setFlashMode(FlashMode mode) async {
     if (controller == null) {
       return;
@@ -438,6 +453,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   Future<void> setExposureMode(ExposureMode mode) async {
     if (controller == null) {
       return;
@@ -451,6 +467,7 @@ class AppCameraController extends GetxController {
     }
   }
 
+  @override
   Future<XFile?> takePicture() async {
     final CameraController? cameraController = controller;
     if (cameraController == null || !cameraController.value.isInitialized) {
@@ -470,6 +487,11 @@ class AppCameraController extends GetxController {
       AppConfig.logger.e(e.toString());
       return null;
     }
+  }
+
+  @override
+  bool isInitialized() {
+    return controller != null && controller!.value.isInitialized;
   }
 
 }
