@@ -1,16 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:neom_commons/commons/ui/theme/app_color.dart';
-import 'package:neom_commons/commons/utils/app_utilities.dart';
-import 'package:neom_core/core/app_config.dart';
-import 'package:neom_core/core/data/implementations/user_controller.dart';
-import 'package:neom_core/core/domain/model/app_profile.dart';
-import 'package:neom_core/core/domain/use_cases/camera_service.dart';
-import 'package:neom_core/core/utils/constants/core_constants.dart';
-import 'package:neom_core/core/utils/enums/user_role.dart';
+import 'package:neom_commons/ui/theme/app_color.dart';
+import 'package:neom_commons/utils/app_utilities.dart';
+import 'package:neom_core/app_config.dart';
+import 'package:neom_core/data/implementations/user_controller.dart';
+import 'package:neom_core/domain/model/app_profile.dart';
+import 'package:neom_core/domain/use_cases/camera_service.dart';
+import 'package:neom_core/utils/constants/core_constants.dart';
+import 'package:neom_core/utils/enums/user_role.dart';
 
 class AppCameraController extends GetxController implements AppCameraService {
 
@@ -144,7 +145,7 @@ class AppCameraController extends GetxController implements AppCameraService {
     );
   }
 
-  @override
+
   void onViewFinderTap(TapDownDetails details, BoxConstraints constraints) {
     if (controller == null) {
       return;
@@ -160,7 +161,6 @@ class AppCameraController extends GetxController implements AppCameraService {
     cameraController.setFocusPoint(offset);
   }
 
-  @override
   Future<void> onNewCameraSelected(CameraDescription cameraDescription) async {
     if (controller != null) {
       return controller!.setDescription(cameraDescription);
@@ -229,13 +229,13 @@ class AppCameraController extends GetxController implements AppCameraService {
 
   @override
   void onTakePictureButtonPressed() {
-    takePicture().then((XFile? xfile) {
-      if (mounted) {
-        imageFile = xfile;
+    takePicture().then((File? file) {
+      if (mounted && file != null) {
+        imageFile = XFile(file.path);
       }
 
-      if (xfile != null) AppConfig.logger.i('Picture saved to ${xfile.path}');
-      Get.back(result: xfile);
+      if (file != null) AppConfig.logger.i('Picture saved to ${file.path}');
+      Get.back(result: file);
     });
   }
 
@@ -310,13 +310,13 @@ class AppCameraController extends GetxController implements AppCameraService {
   void onStopButtonPressed() {
     isRecording.value = false;
 
-    stopVideoRecording().then((XFile? xfile) {
+    stopVideoRecording().then((File? file) {
       if (mounted) {
         update();
       }
 
-      if (xfile != null) AppConfig.logger.i('Video recorded to ${xfile.path}');
-      Get.back(result: xfile);
+      if (file != null) AppConfig.logger.i('Video recorded to ${file.path}');
+      Get.back(result: file);
     });
   }
 
@@ -392,7 +392,7 @@ class AppCameraController extends GetxController implements AppCameraService {
   }
 
   @override
-  Future<XFile?> stopVideoRecording() async {
+  Future<File?> stopVideoRecording() async {
     final CameraController? cameraController = controller;
 
     if (cameraController == null || !cameraController.value.isRecordingVideo) {
@@ -400,7 +400,8 @@ class AppCameraController extends GetxController implements AppCameraService {
     }
 
     try {
-      return cameraController.stopVideoRecording();
+      XFile xfile = await cameraController.stopVideoRecording();
+      return File(xfile.path);
     } on CameraException catch (e) {
       AppConfig.logger.e(e.toString());
       return null;
@@ -439,7 +440,6 @@ class AppCameraController extends GetxController implements AppCameraService {
     }
   }
 
-  @override
   Future<void> setFlashMode(FlashMode mode) async {
     if (controller == null) {
       return;
@@ -453,7 +453,7 @@ class AppCameraController extends GetxController implements AppCameraService {
     }
   }
 
-  @override
+
   Future<void> setExposureMode(ExposureMode mode) async {
     if (controller == null) {
       return;
@@ -468,7 +468,7 @@ class AppCameraController extends GetxController implements AppCameraService {
   }
 
   @override
-  Future<XFile?> takePicture() async {
+  Future<File?> takePicture() async {
     final CameraController? cameraController = controller;
     if (cameraController == null || !cameraController.value.isInitialized) {
       AppUtilities.showSnackBar(message: 'Error: select a camera first.');
@@ -482,7 +482,7 @@ class AppCameraController extends GetxController implements AppCameraService {
 
     try {
       final XFile file = await cameraController.takePicture();
-      return file;
+      return File(file.path);
     } on CameraException catch (e) {
       AppConfig.logger.e(e.toString());
       return null;

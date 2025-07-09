@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 
-import 'package:neom_core/core/utils/constants/app_route_constants.dart';
+import 'package:neom_core/utils/constants/app_route_constants.dart';
 import 'ui/app_camera_page.dart';
 
 class CameraRoutes {
