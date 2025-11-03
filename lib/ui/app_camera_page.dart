@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:neom_commons/ui/theme/app_color.dart';
@@ -6,8 +5,7 @@ import 'package:neom_commons/ui/theme/app_theme.dart';
 import 'package:neom_commons/ui/widgets/app_circular_progress_indicator.dart';
 import 'package:neom_commons/ui/widgets/appbar_child.dart';
 import 'package:neom_commons/utils/constants/app_page_id_constants.dart';
-import 'package:neom_commons/utils/constants/app_translation_constants.dart';
-
+import 'package:neom_commons/utils/constants/translations/app_translation_constants.dart';
 import 'app_camera_controller.dart';
 
 class AppCameraPage extends StatelessWidget {
@@ -21,7 +19,7 @@ class AppCameraPage extends StatelessWidget {
     return GetBuilder<AppCameraController>(
       id: AppPageIdConstants.camera,
       init: AppCameraController(),
-      builder: (_) => Scaffold(
+      builder: (controller) => Scaffold(
       appBar: AppBarChild(
         leadingWidget: IconButton(icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
@@ -30,23 +28,23 @@ class AppCameraPage extends StatelessWidget {
       ),
       backgroundColor: AppColor.main50,
       body: SizedBox(
-        child: Obx(()=> _.isLoading.value ? AppCircularProgressIndicator() : Stack(
+        child: Obx(()=> controller.isLoading.value ? AppCircularProgressIndicator() : Stack(
         alignment: Alignment.center,
         children: [
-          (!_.isDisposed) ? SizedBox(
+          (!controller.isDisposed) ? SizedBox(
             width: AppTheme.fullWidth(context),
             child: ClipRRect(
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(50.0),
                 bottomRight: Radius.circular(50.0),
               ),
-              child: _.cameraPreviewWidget(),),
+              child: controller.cameraPreviewWidget(),),
           ) : const CircularProgressIndicator(),
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
               padding: const EdgeInsets.only(bottom: 30.0),
-              child: _.modeControlRowWidget(),
+              child: controller.modeControlRowWidget(),
             )
           ),
           Align(
@@ -55,31 +53,31 @@ class AppCameraPage extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 30.0),
               child: GestureDetector(
                 onTap: () {
-                  if(_.controller != null && _.controller!.value.isInitialized && !_.controller!.value.isRecordingVideo) {
-                    _.onTakePictureButtonPressed();
+                  if(controller.controller != null && controller.controller!.value.isInitialized && !controller.controller!.value.isRecordingVideo) {
+                    controller.onTakePictureButtonPressed();
                   }
                 },
                 onLongPress: () {
-                  if((_.userController.user.isVerified) && _.controller != null
-                      && _.controller!.value.isInitialized && !_.controller!.value.isRecordingVideo) {
-                    _.onVideoRecordButtonPressed();
+                  if((controller.userServiceImpl.user.isVerified) && controller.controller != null
+                      && controller.controller!.value.isInitialized && !controller.controller!.value.isRecordingVideo) {
+                    controller.onVideoRecordButtonPressed();
                   }
                 },
                 onLongPressEnd: (details) {
-                  if((_.userController.user.isVerified) && _.controller != null
-                      && _.controller!.value.isInitialized && _.controller!.value.isRecordingVideo) {
-                    _.onStopButtonPressed();
+                  if((controller.userServiceImpl.user.isVerified) && controller.controller != null
+                      && controller.controller!.value.isInitialized && controller.controller!.value.isRecordingVideo) {
+                    controller.onStopButtonPressed();
                   }
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  width: _.isRecording.value ? 90 : 80,
-                  height: _.isRecording.value ? 90 : 80,
+                  width: controller.isRecording.value ? 90 : 80,
+                  height: controller.isRecording.value ? 90 : 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _.isRecording.value ? AppColor.red : AppColor.lightGrey,
+                    color: controller.isRecording.value ? AppColor.red : AppColor.lightGrey,
                   ),
-                  child: _.isRecording.value ? const Icon(Icons.stop, color: Colors.white, size: 45,) : null,
+                  child: controller.isRecording.value ? const Icon(Icons.stop, color: Colors.white, size: 45,) : null,
                 ),
               ),
             ),

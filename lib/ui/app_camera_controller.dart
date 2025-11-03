@@ -7,15 +7,15 @@ import 'package:get/get.dart';
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/utils/app_utilities.dart';
 import 'package:neom_core/app_config.dart';
-import 'package:neom_core/data/implementations/user_controller.dart';
 import 'package:neom_core/domain/model/app_profile.dart';
 import 'package:neom_core/domain/use_cases/camera_service.dart';
+import 'package:neom_core/domain/use_cases/user_service.dart';
 import 'package:neom_core/utils/constants/core_constants.dart';
 import 'package:neom_core/utils/enums/user_role.dart';
 
 class AppCameraController extends GetxController implements AppCameraService {
 
-  final userController = Get.find<UserController>();
+  final userServiceImpl = Get.find<UserService>();
   AppProfile profile = AppProfile();
 
   CameraController? controller;
@@ -44,7 +44,7 @@ class AppCameraController extends GetxController implements AppCameraService {
   void onInit() {
     super.onInit();
     AppConfig.logger.t("PostUpload Controller Init");
-    profile = userController.profile;
+    profile = userServiceImpl.profile;
 
     try {
       initializeCameraController();
@@ -136,7 +136,7 @@ class AppCameraController extends GetxController implements AppCameraService {
               ? AppColor.mystic : AppColor.yellow,
           onPressed: controller != null ? onFlashModeButtonPressed : null,
         ),
-        if (userController.user.isVerified) IconButton(
+        if (userServiceImpl.user.isVerified) IconButton(
           icon: Icon(enableAudio.value ? Icons.volume_up : Icons.volume_mute),
           color: enableAudio.value ? AppColor.mystic : AppColor.yellow,
           onPressed: controller != null ? onAudioModeButtonPressed : null,
@@ -144,7 +144,6 @@ class AppCameraController extends GetxController implements AppCameraService {
       ],
     );
   }
-
 
   void onViewFinderTap(TapDownDetails details, BoxConstraints constraints) {
     if (controller == null) {
@@ -376,7 +375,7 @@ class AppCameraController extends GetxController implements AppCameraService {
     try {
       await cameraController.startVideoRecording();
 
-      int maxDurationInSeconds = userController.user.userRole == UserRole.subscriber
+      int maxDurationInSeconds = userServiceImpl.user.userRole == UserRole.subscriber
           ? CoreConstants.verifiedMaxVideoDurationInSeconds : CoreConstants.adminMaxVideoDurationInSeconds;
       Duration duration = Duration(seconds: maxDurationInSeconds);
       Timer(duration, () async {
