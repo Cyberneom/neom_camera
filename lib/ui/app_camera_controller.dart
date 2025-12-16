@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:image/image.dart' as img; // Alias para no confundir con el widget Image
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/utils/app_utilities.dart';
 import 'package:neom_core/app_config.dart';
 import 'package:neom_core/domain/model/app_profile.dart';
 import 'package:neom_core/domain/use_cases/camera_service.dart';
+import 'package:neom_core/domain/use_cases/media_upload_service.dart';
 import 'package:neom_core/domain/use_cases/user_service.dart';
 import 'package:neom_core/utils/constants/core_constants.dart';
 import 'package:neom_core/utils/enums/user_role.dart';
@@ -25,7 +27,7 @@ class AppCameraController extends GetxController implements AppCameraService {
 
   RxBool enableAudio = true.obs;
   int flashModeIndex = 0;
-  Icon flashIcon = const Icon(Icons.flash_off);
+  Rx<Icon> flashIcon = Icon(Icons.flash_off).obs;
   RxBool isRecording = false.obs;
   RxBool disposed = false.obs;
   RxBool isLoading = true.obs;
@@ -43,7 +45,7 @@ class AppCameraController extends GetxController implements AppCameraService {
   @override
   void onInit() {
     super.onInit();
-    AppConfig.logger.t("PostUpload Controller Init");
+    AppConfig.logger.t("AppCameraController onInit");
     profile = userServiceImpl.profile;
 
     try {
@@ -78,14 +80,27 @@ class AppCameraController extends GetxController implements AppCameraService {
   Future<void> initializeCameraController() async {
     try {
       cameras = await availableCameras();
-      final rearCamera = cameras.firstWhere((camera) => camera.lensDirection == CameraLensDirection.back);
-      controller = CameraController(rearCamera, ResolutionPreset.high);
-      await controller?.initialize();
+
+      if(cameras.isNotEmpty) {
+        selectedCameraIndex = cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.back);
+        if (selectedCameraIndex == -1) selectedCameraIndex = 0;
+        await _initializeCameraController(cameras[selectedCameraIndex]);
+      }
+
       isLoading.value = false;
     } catch (e) {
       AppConfig.logger.e(e.toString());
     }
 
+  }
+
+  void onSwitchCamera() {
+    if (cameras.length < 2) return; // No hacer nada si solo hay 1 cámara
+
+    selectedCameraIndex = (selectedCameraIndex + 1) % cameras.length;
+    final newCameraDescription = cameras[selectedCameraIndex];
+
+    onNewCameraSelected(newCameraDescription);
   }
 
   /// Display the preview from the camera (or a message if the preview is not available).
@@ -131,7 +146,7 @@ class AppCameraController extends GetxController implements AppCameraService {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: <Widget>[
         IconButton(
-          icon: flashIcon,
+          icon: flashIcon.value,
           color: controller?.value.flashMode == FlashMode.off
               ? AppColor.mystic : AppColor.yellow,
           onPressed: controller != null ? onFlashModeButtonPressed : null,
@@ -169,8 +184,11 @@ class AppCameraController extends GetxController implements AppCameraService {
   }
 
   Future<void> _initializeCameraController(CameraDescription cameraDescription, {bool isAudioEnabled = true}) async {
-    final CameraController cameraController = CameraController(cameraDescription,
-      ResolutionPreset.high, enableAudio: isAudioEnabled, imageFormatGroup: ImageFormatGroup.jpeg,
+    final CameraController cameraController = CameraController(
+      cameraDescription,
+      ResolutionPreset.max,
+      enableAudio: isAudioEnabled,
+      imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.jpeg : ImageFormatGroup.bgra8888,
     );
 
     controller = cameraController;
@@ -233,8 +251,11 @@ class AppCameraController extends GetxController implements AppCameraService {
         imageFile = XFile(file.path);
       }
 
-      if (file != null) AppConfig.logger.i('Picture saved to ${file.path}');
-      Get.back(result: file);
+      if (file != null) {
+        AppConfig.logger.i('Picture saved to ${file.path}');
+        Get.find<MediaUploadService>().handleMedia(file);
+      }
+
     });
   }
 
@@ -249,19 +270,19 @@ class AppCameraController extends GetxController implements AppCameraService {
     }
     switch(flashModeIndex) {
       case 0:
-        flashIcon = const Icon(Icons.flash_off);
+        flashIcon.value = const Icon(Icons.flash_off);
         flashMode = FlashMode.off;
         break;
       case 1:
-        flashIcon = const Icon(Icons.flash_auto);
+        flashIcon.value = const Icon(Icons.flash_auto);
         flashMode = FlashMode.auto;
         break;
       case 2:
-        flashIcon = const Icon(Icons.flash_on);
+        flashIcon.value = const Icon(Icons.flash_on);
         flashMode = FlashMode.always;
         break;
       case 3:
-        flashIcon = const Icon(Icons.highlight);
+        flashIcon.value = const Icon(Icons.highlight);
         flashMode = FlashMode.torch;
         break;
       case 4:
@@ -296,8 +317,13 @@ class AppCameraController extends GetxController implements AppCameraService {
 
   @override
   void onVideoRecordButtonPressed() {
-    isRecording.value = true;
 
+    if (isFrontCamera) {
+      AppUtilities.showSnackBar(message: "Grabación de video no disponible en cámara frontal por el momento.");
+      return;
+    }
+
+    isRecording.value = true;
     startVideoRecording().then((_) {
       if (mounted) {
         update();
@@ -314,8 +340,12 @@ class AppCameraController extends GetxController implements AppCameraService {
         update();
       }
 
-      if (file != null) AppConfig.logger.i('Video recorded to ${file.path}');
-      Get.back(result: file);
+
+
+      if (file != null) {
+        AppConfig.logger.i('Video recorded to ${file.path}');
+        Get.find<MediaUploadService>().handleMedia(file);
+      }
     });
   }
 
@@ -399,8 +429,60 @@ class AppCameraController extends GetxController implements AppCameraService {
     }
 
     try {
+      // 1. Detenemos la grabación normalmente
       XFile xfile = await cameraController.stopVideoRecording();
-      return File(xfile.path);
+      File videoFile = File(xfile.path);
+
+      ///Funcion para voltear video frontal pues se graba en espejo
+      // 2. Verificamos si es cámara frontal para aplicar el efecto espejo
+      // if (cameras.isNotEmpty &&
+      //     cameras[selectedCameraIndex].lensDirection == CameraLensDirection.front) {
+      //
+      //   AppConfig.logger.i("Procesando video de cámara frontal (Flip Horizontal)... Esto puede tardar.");
+      //
+      //   // Activamos loading porque esto toma tiempo (depende de la duración del video)
+      //   isLoading.value = true;
+      //   update(); // Forzar actualización de UI para mostrar spinner
+      //
+      //   try {
+      //
+          // Generamos una ruta temporal para el video procesado
+          // final directory = await getTemporaryDirectory();
+          // final String outputPath = '${directory.path}/${DateTime.now().millisecondsSinceEpoch}_flipped.mp4';
+
+          // COMANDO FFMPEG:
+          // -i [input]: Archivo original
+          // -vf hflip: Filtro de video "Horizontal Flip"
+          // -c:a copy: Copia el audio sin re-procesarlo (más rápido)
+          // [output]: Archivo de salida
+          // String command = '-i "${videoFile.path}" -vf hflip -c:a copy "$outputPath"';
+
+          // // Ejecutamos el comando
+          // await FFmpegKit.execute(command).then((session) async {
+          //   final returnCode = await session.getReturnCode();
+          //
+          //   if (ReturnCode.isSuccess(returnCode)) {
+          //     AppConfig.logger.i("Video volteado exitosamente.");
+          //     // Si tuvo éxito, reemplazamos el archivo original con el procesado
+          //     // Opcional: Borrar el original para ahorrar espacio
+          //     if (await videoFile.exists()) {
+          //       await videoFile.delete();
+          //     }
+          //     videoFile = File(outputPath);
+          //   } else {
+          //     AppConfig.logger.e("Error al voltear el video. Código: $returnCode");
+          //     // Si falla, nos quedamos con el video original (invertido)
+          //   }
+          // });
+      //   } catch (e) {
+      //     AppConfig.logger.e("Excepción procesando video: $e");
+      //   } finally {
+      //     isLoading.value = false;
+      //     update(); // Quitamos spinner
+      //   }
+      // }
+
+      return videoFile;
     } on CameraException catch (e) {
       AppConfig.logger.e(e.toString());
       return null;
@@ -475,14 +557,42 @@ class AppCameraController extends GetxController implements AppCameraService {
     }
 
     if (cameraController.value.isTakingPicture) {
-      // A capture is already pending, do nothing.
       return null;
     }
 
     try {
       final XFile file = await cameraController.takePicture();
-      return File(file.path);
+      File savedFile = File(file.path);
+
+      // --- LÓGICA DE CORRECCIÓN DE ESPEJO ---
+      // Verificamos si la cámara actual es la frontal
+      if (cameras.isNotEmpty &&
+          cameras[selectedCameraIndex].lensDirection == CameraLensDirection.front) {
+
+        AppConfig.logger.i("Procesando foto de cámara frontal (Flip Horizontal)...");
+
+        // 1. Leemos los bytes de la imagen
+        final imageBytes = await savedFile.readAsBytes();
+
+        // 2. Decodificamos la imagen usando la librería 'image'
+        img.Image? originalImage = img.decodeImage(imageBytes);
+
+        if (originalImage != null) {
+          // 3. Volteamos horizontalmente (Flip)
+          img.Image fixedImage = img.flipHorizontal(originalImage);
+
+          // 4. Sobrescribimos el archivo original con la imagen corregida
+          // Nota: encodeJpg es lo más común, ajusta si usas png
+          await savedFile.writeAsBytes(img.encodeJpg(fixedImage));
+
+          AppConfig.logger.i("Foto frontal corregida correctamente.");
+        }
+      }
+      return savedFile;
     } on CameraException catch (e) {
+      AppConfig.logger.e(e.toString());
+      return null;
+    } catch (e) {
       AppConfig.logger.e(e.toString());
       return null;
     }
@@ -492,5 +602,18 @@ class AppCameraController extends GetxController implements AppCameraService {
   bool isInitialized() {
     return controller != null && controller!.value.isInitialized;
   }
+
+  @override
+  bool get isDisposed => disposed.value;
+
+  int selectedCameraIndex = 0;
+
+  // GETTER ÚTIL: Para saber si estamos en frontal
+  bool get isFrontCamera {
+    if (cameras.isEmpty) return false;
+    return cameras[selectedCameraIndex].lensDirection == CameraLensDirection.front;
+  }
+
+
 
 }

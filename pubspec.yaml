@@ -1,6 +1,6 @@
 name: neom_camera
 description: Camera functionality for Open Neom
-version: 1.1.0
+version: 1.2.0
 homepage: https://github.com/Cyberneom/neom_camera
 publish_to: 'none'
 
@@ -20,6 +20,8 @@ dependencies:
       url: git@github.com:Cyberneom/neom_commons.git
 
   camera: ^0.11.1
+
+  image: ^4.1.7
 
 dev_dependencies:
   flutter_test:
