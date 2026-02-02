@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
+import 'package:sint/sint.dart';
 import 'package:image/image.dart' as img; // Alias para no confundir con el widget Image
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/utils/app_utilities.dart';
@@ -15,9 +15,9 @@ import 'package:neom_core/domain/use_cases/user_service.dart';
 import 'package:neom_core/utils/constants/core_constants.dart';
 import 'package:neom_core/utils/enums/user_role.dart';
 
-class AppCameraController extends GetxController implements AppCameraService {
+class AppCameraController extends SintController implements AppCameraService {
 
-  final userServiceImpl = Get.find<UserService>();
+  final userServiceImpl = Sint.find<UserService>();
   AppProfile profile = AppProfile();
 
   CameraController? controller;
@@ -253,7 +253,7 @@ class AppCameraController extends GetxController implements AppCameraService {
 
       if (file != null) {
         AppConfig.logger.i('Picture saved to ${file.path}');
-        Get.find<MediaUploadService>().handleMedia(file);
+        Sint.find<MediaUploadService>().handleMedia(file);
       }
 
     });
@@ -344,7 +344,7 @@ class AppCameraController extends GetxController implements AppCameraService {
 
       if (file != null) {
         AppConfig.logger.i('Video recorded to ${file.path}');
-        Get.find<MediaUploadService>().handleMedia(file);
+        Sint.find<MediaUploadService>().handleMedia(file);
       }
     });
   }

@@ -1,6 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
+import 'package:sint/sint.dart';
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/ui/theme/app_theme.dart';
 import 'package:neom_commons/ui/widgets/app_circular_progress_indicator.dart';
@@ -14,7 +14,7 @@ class AppCameraPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetBuilder<AppCameraController>(
+    return SintBuilder<AppCameraController>(
       id: AppPageIdConstants.camera,
       init: AppCameraController(),
       builder: (controller) => Scaffold(
