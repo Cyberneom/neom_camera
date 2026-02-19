@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:easy_video_editor/easy_video_editor.dart';
 import 'package:flutter/material.dart';
-import 'package:sint/sint.dart';
 import 'package:image/image.dart' as img; // Alias para no confundir con el widget Image
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/utils/app_utilities.dart';
@@ -14,6 +14,8 @@ import 'package:neom_core/domain/use_cases/media_upload_service.dart';
 import 'package:neom_core/domain/use_cases/user_service.dart';
 import 'package:neom_core/utils/constants/core_constants.dart';
 import 'package:neom_core/utils/enums/user_role.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sint/sint.dart';
 
 class AppCameraController extends SintController implements AppCameraService {
 
@@ -94,6 +96,28 @@ class AppCameraController extends SintController implements AppCameraService {
 
   }
 
+  @override
+  Future<void> initializeFrontCamera() async {
+    try {
+      cameras = await availableCameras();
+
+      if (cameras.isNotEmpty) {
+        // Find front camera specifically
+        selectedCameraIndex = cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.front);
+        if (selectedCameraIndex == -1) {
+          // Fallback to first camera if no front camera found
+          selectedCameraIndex = 0;
+          AppConfig.logger.w("Front camera not found, using default camera");
+        }
+        await _initializeCameraController(cameras[selectedCameraIndex]);
+      }
+
+      isLoading.value = false;
+    } catch (e) {
+      AppConfig.logger.e("Error initializing front camera: $e");
+    }
+  }
+
   void onSwitchCamera() {
     if (cameras.length < 2) return; // No hacer nada si solo hay 1 cámara
 
@@ -104,6 +128,7 @@ class AppCameraController extends SintController implements AppCameraService {
   }
 
   /// Display the preview from the camera (or a message if the preview is not available).
+  @override
   Widget cameraPreviewWidget() {
     return Listener(
         onPointerDown: (_) => _pointers++,
@@ -184,9 +209,24 @@ class AppCameraController extends SintController implements AppCameraService {
   }
 
   Future<void> _initializeCameraController(CameraDescription cameraDescription, {bool isAudioEnabled = true}) async {
+    // IMPORTANT: Dispose previous controller to release camera resources
+    // This prevents "too many use cases" error on Android CameraX
+    // when reinitializing camera for different purposes (photo vs video)
+    if (controller != null) {
+      AppConfig.logger.d("Disposing previous camera controller before reinitializing");
+      try {
+        await controller!.dispose();
+      } catch (e) {
+        AppConfig.logger.w("Error disposing previous camera controller: $e");
+      }
+      controller = null;
+    }
+
+    // Use ResolutionPreset.high instead of max to avoid "too many use cases" error
+    // on devices with limited camera surface combinations
     final CameraController cameraController = CameraController(
       cameraDescription,
-      ResolutionPreset.max,
+      ResolutionPreset.high,
       enableAudio: isAudioEnabled,
       imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.jpeg : ImageFormatGroup.bgra8888,
     );
@@ -403,6 +443,15 @@ class AppCameraController extends SintController implements AppCameraService {
     }
 
     try {
+      // Lock exposure before starting recording to prevent auto-adjustment
+      // that causes darkening during recording on some devices
+      try {
+        await cameraController.setExposureMode(ExposureMode.locked);
+        AppConfig.logger.d("Exposure locked for video recording");
+      } catch (e) {
+        AppConfig.logger.w("Could not lock exposure: $e");
+      }
+
       await cameraController.startVideoRecording();
 
       int maxDurationInSeconds = userServiceImpl.user.userRole == UserRole.subscriber
@@ -429,58 +478,61 @@ class AppCameraController extends SintController implements AppCameraService {
     }
 
     try {
-      // 1. Detenemos la grabación normalmente
+      // 1. Stop the recording
       XFile xfile = await cameraController.stopVideoRecording();
       File videoFile = File(xfile.path);
 
-      ///Funcion para voltear video frontal pues se graba en espejo
-      // 2. Verificamos si es cámara frontal para aplicar el efecto espejo
-      // if (cameras.isNotEmpty &&
-      //     cameras[selectedCameraIndex].lensDirection == CameraLensDirection.front) {
-      //
-      //   AppConfig.logger.i("Procesando video de cámara frontal (Flip Horizontal)... Esto puede tardar.");
-      //
-      //   // Activamos loading porque esto toma tiempo (depende de la duración del video)
-      //   isLoading.value = true;
-      //   update(); // Forzar actualización de UI para mostrar spinner
-      //
-      //   try {
-      //
-          // Generamos una ruta temporal para el video procesado
-          // final directory = await getTemporaryDirectory();
-          // final String outputPath = '${directory.path}/${DateTime.now().millisecondsSinceEpoch}_flipped.mp4';
+      // Unlock exposure after recording is done
+      try {
+        await cameraController.setExposureMode(ExposureMode.auto);
+        AppConfig.logger.d("Exposure unlocked after video recording");
+      } catch (e) {
+        AppConfig.logger.w("Could not unlock exposure: $e");
+      }
 
-          // COMANDO FFMPEG:
-          // -i [input]: Archivo original
-          // -vf hflip: Filtro de video "Horizontal Flip"
-          // -c:a copy: Copia el audio sin re-procesarlo (más rápido)
-          // [output]: Archivo de salida
-          // String command = '-i "${videoFile.path}" -vf hflip -c:a copy "$outputPath"';
+      // 2. Apply horizontal flip for front camera videos
+      // This makes the recorded video match the preview (mirror effect like WhatsApp)
+      if (cameras.isNotEmpty &&
+          cameras[selectedCameraIndex].lensDirection == CameraLensDirection.front) {
 
-          // // Ejecutamos el comando
-          // await FFmpegKit.execute(command).then((session) async {
-          //   final returnCode = await session.getReturnCode();
-          //
-          //   if (ReturnCode.isSuccess(returnCode)) {
-          //     AppConfig.logger.i("Video volteado exitosamente.");
-          //     // Si tuvo éxito, reemplazamos el archivo original con el procesado
-          //     // Opcional: Borrar el original para ahorrar espacio
-          //     if (await videoFile.exists()) {
-          //       await videoFile.delete();
-          //     }
-          //     videoFile = File(outputPath);
-          //   } else {
-          //     AppConfig.logger.e("Error al voltear el video. Código: $returnCode");
-          //     // Si falla, nos quedamos con el video original (invertido)
-          //   }
-          // });
-      //   } catch (e) {
-      //     AppConfig.logger.e("Excepción procesando video: $e");
-      //   } finally {
-      //     isLoading.value = false;
-      //     update(); // Quitamos spinner
-      //   }
-      // }
+        AppConfig.logger.i("Applying horizontal flip to front camera video...");
+
+        try {
+          // Generate output path for flipped video
+          final directory = await getTemporaryDirectory();
+          final String outputPath = '${directory.path}/${DateTime.now().millisecondsSinceEpoch}_flipped.mp4';
+
+          // Use easy_video_editor to flip the video horizontally
+          final flippedPath = await VideoEditorBuilder(videoPath: videoFile.path)
+              .flip(flipDirection: FlipDirection.horizontal)
+              .export(
+                outputPath: outputPath,
+                onProgress: (progress) {
+                  AppConfig.logger.d('Flip progress: ${(progress * 100).toStringAsFixed(0)}%');
+                },
+              );
+
+          if (flippedPath != null && flippedPath.isNotEmpty && File(flippedPath).existsSync()) {
+            AppConfig.logger.i("Video flipped successfully: $flippedPath");
+
+            // Delete original file to save space
+            try {
+              if (await videoFile.exists()) {
+                await videoFile.delete();
+              }
+            } catch (e) {
+              AppConfig.logger.w("Could not delete original video: $e");
+            }
+
+            videoFile = File(flippedPath);
+          } else {
+            AppConfig.logger.w("Flip failed, using original video");
+          }
+        } catch (e) {
+          AppConfig.logger.e("Error flipping video: $e");
+          // If flip fails, return original video (still works, just not mirrored)
+        }
+      }
 
       return videoFile;
     } on CameraException catch (e) {

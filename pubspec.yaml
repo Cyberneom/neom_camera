@@ -1,6 +1,6 @@
 name: neom_camera
 description: Camera functionality for Open Neom
-version: 1.2.0
+version: 1.3.0
 homepage: https://github.com/Cyberneom/neom_camera
 publish_to: 'none'
 
@@ -20,12 +20,14 @@ dependencies:
       url: git@github.com:Cyberneom/neom_commons.git
 
   camera: ^0.11.1
-
   image: ^4.1.7
+
+  # For horizontal flip of front camera videos
+  easy_video_editor: ^0.1.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
