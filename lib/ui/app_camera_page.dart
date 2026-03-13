@@ -27,7 +27,7 @@ class AppCameraPage extends StatelessWidget {
           title: AppTranslationConstants.camera.tr,
           centerTitle: true,
         ),
-        backgroundColor: AppColor.main50,
+        backgroundColor: AppColor.scaffold,
         body: SizedBox(
           child: Obx(() => controller.isLoading.value
               ? const AppCircularProgressIndicator()

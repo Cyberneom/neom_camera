@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:neom_core/utils/platform/core_io.dart';
 import 'package:easy_video_editor/easy_video_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img; // Alias para no confundir con el widget Image
@@ -228,7 +229,7 @@ class AppCameraController extends SintController implements AppCameraService {
       cameraDescription,
       ResolutionPreset.high,
       enableAudio: isAudioEnabled,
-      imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.jpeg : ImageFormatGroup.bgra8888,
+      imageFormatGroup: !kIsWeb && Platform.isAndroid ? ImageFormatGroup.jpeg : ImageFormatGroup.bgra8888,
     );
 
     controller = cameraController;
