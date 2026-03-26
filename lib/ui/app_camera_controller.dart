@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img; // Alias para no confundir con el widg
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/utils/app_utilities.dart';
 import 'package:neom_core/app_config.dart';
+import 'package:neom_core/utils/neom_error_logger.dart';
 import 'package:neom_core/domain/model/app_profile.dart';
 import 'package:neom_core/domain/use_cases/camera_service.dart';
 import 'package:neom_core/domain/use_cases/media_upload_service.dart';
@@ -57,8 +58,8 @@ class AppCameraController extends SintController implements AppCameraService {
       onSetFlashModeButtonPressed(FlashMode.off);
 
 
-    } catch (e) {
-      AppConfig.logger.e(e.toString());
+    } catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'onInit');
     }
 
   }
@@ -68,8 +69,8 @@ class AppCameraController extends SintController implements AppCameraService {
     super.onReady();
 
     try {
-    } catch (e) {
-      AppConfig.logger.e(e.toString());
+    } catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'onReady');
     }
   }
 
@@ -91,8 +92,8 @@ class AppCameraController extends SintController implements AppCameraService {
       }
 
       isLoading.value = false;
-    } catch (e) {
-      AppConfig.logger.e(e.toString());
+    } catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'initializeCameraController');
     }
 
   }
@@ -114,8 +115,8 @@ class AppCameraController extends SintController implements AppCameraService {
       }
 
       isLoading.value = false;
-    } catch (e) {
-      AppConfig.logger.e("Error initializing front camera: $e");
+    } catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'initializeFrontCamera');
     }
   }
 
@@ -217,8 +218,8 @@ class AppCameraController extends SintController implements AppCameraService {
       AppConfig.logger.d("Disposing previous camera controller before reinitializing");
       try {
         await controller!.dispose();
-      } catch (e) {
-        AppConfig.logger.w("Error disposing previous camera controller: $e");
+      } catch (e, st) {
+        NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: '_initializeCameraController.dispose');
       }
       controller = null;
     }
@@ -250,7 +251,7 @@ class AppCameraController extends SintController implements AppCameraService {
         cameraController.getMaxZoomLevel().then((double value) => _maxAvailableZoom = value),
         cameraController.getMinZoomLevel().then((double value) => _minAvailableZoom = value),
       ]);
-    } on CameraException catch (e) {
+    } on CameraException catch (e, st) {
       switch (e.code) {
         case 'CameraAccessDenied':
           AppUtilities.showSnackBar(message: 'You have denied camera access.');
@@ -275,7 +276,7 @@ class AppCameraController extends SintController implements AppCameraService {
           AppUtilities.showSnackBar(message: 'Audio access is restricted.');
           break;
         default:
-          AppConfig.logger.e(e.toString());
+          NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: '_initializeCameraController');
           break;
       }
     }
@@ -449,8 +450,8 @@ class AppCameraController extends SintController implements AppCameraService {
       try {
         await cameraController.setExposureMode(ExposureMode.locked);
         AppConfig.logger.d("Exposure locked for video recording");
-      } catch (e) {
-        AppConfig.logger.w("Could not lock exposure: $e");
+      } catch (e, st) {
+        NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'startVideoRecording.lockExposure');
       }
 
       await cameraController.startVideoRecording();
@@ -464,8 +465,8 @@ class AppCameraController extends SintController implements AppCameraService {
         }
       });
 
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'startVideoRecording');
       return;
     }
   }
@@ -487,8 +488,8 @@ class AppCameraController extends SintController implements AppCameraService {
       try {
         await cameraController.setExposureMode(ExposureMode.auto);
         AppConfig.logger.d("Exposure unlocked after video recording");
-      } catch (e) {
-        AppConfig.logger.w("Could not unlock exposure: $e");
+      } catch (e, st) {
+        NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'stopVideoRecording.unlockExposure');
       }
 
       // 2. Apply horizontal flip for front camera videos
@@ -521,23 +522,23 @@ class AppCameraController extends SintController implements AppCameraService {
               if (await videoFile.exists()) {
                 await videoFile.delete();
               }
-            } catch (e) {
-              AppConfig.logger.w("Could not delete original video: $e");
+            } catch (e, st) {
+              NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'stopVideoRecording.deleteOriginal');
             }
 
             videoFile = File(flippedPath);
           } else {
             AppConfig.logger.w("Flip failed, using original video");
           }
-        } catch (e) {
-          AppConfig.logger.e("Error flipping video: $e");
+        } catch (e, st) {
+          NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'stopVideoRecording.flipVideo');
           // If flip fails, return original video (still works, just not mirrored)
         }
       }
 
       return videoFile;
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'stopVideoRecording');
       return null;
     }
   }
@@ -552,8 +553,8 @@ class AppCameraController extends SintController implements AppCameraService {
 
     try {
       await cameraController.pauseVideoRecording();
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'pauseVideoRecording');
       rethrow;
     }
   }
@@ -568,8 +569,8 @@ class AppCameraController extends SintController implements AppCameraService {
 
     try {
       await cameraController.resumeVideoRecording();
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'resumeVideoRecording');
       rethrow;
     }
   }
@@ -581,8 +582,8 @@ class AppCameraController extends SintController implements AppCameraService {
 
     try {
       await controller!.setFlashMode(mode);
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'setFlashMode');
       rethrow;
     }
   }
@@ -595,8 +596,8 @@ class AppCameraController extends SintController implements AppCameraService {
 
     try {
       await controller!.setExposureMode(mode);
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'setExposureMode');
       rethrow;
     }
   }
@@ -642,11 +643,11 @@ class AppCameraController extends SintController implements AppCameraService {
         }
       }
       return savedFile;
-    } on CameraException catch (e) {
-      AppConfig.logger.e(e.toString());
+    } on CameraException catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'takePicture');
       return null;
-    } catch (e) {
-      AppConfig.logger.e(e.toString());
+    } catch (e, st) {
+      NeomErrorLogger.recordError(e, st, module: 'neom_camera', operation: 'takePicture');
       return null;
     }
   }

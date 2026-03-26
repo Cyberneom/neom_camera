@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:neom_commons/ui/theme/app_color.dart';
 import 'package:neom_commons/ui/theme/app_theme.dart';
 import 'package:neom_commons/ui/widgets/app_circular_progress_indicator.dart';
-import 'package:neom_commons/ui/widgets/appbar_child.dart';
 import 'package:neom_commons/utils/constants/app_page_id_constants.dart';
 import 'package:neom_commons/utils/constants/translations/app_translation_constants.dart';
 import 'package:sint/sint.dart';
@@ -19,10 +18,10 @@ class AppCameraPage extends StatelessWidget {
       id: AppPageIdConstants.camera,
       init: AppCameraController(),
       builder: (controller) => Scaffold(
-        appBar: AppBarChild(
-          leadingWidget: IconButton(
+        appBar: SintAppBar(
+          leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Sint.back(),
           ),
           title: AppTranslationConstants.camera.tr,
           centerTitle: true,
