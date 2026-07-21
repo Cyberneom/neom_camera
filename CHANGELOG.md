@@ -1,3 +1,6 @@
+
+## [2.0.0-unreleased] - 2026-07-21
+- Refactor and compatibility updates for app_camera_controller.dart.
 ### 1.0.0 - Initial Release & Decoupling from neom_posts
 This marks the initial official release (v1.0.0) of neom_camera as a standalone, independent module within the Open Neom ecosystem. Previously, camera functionalities (such as taking photos for post creation) were often embedded directly within content creation modules like neom_posts. This decoupling is a crucial step in formalizing the media capture layer, enhancing modularity, and strengthening Open Neom's adherence to Clean Architecture principles.
 

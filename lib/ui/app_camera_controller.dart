@@ -50,6 +50,7 @@ class AppCameraController extends SintController implements AppCameraService {
   void onInit() {
     super.onInit();
     AppConfig.logger.t("AppCameraController onInit");
+    mounted = true;
     profile = userServiceImpl.profile;
 
     try {
@@ -76,6 +77,7 @@ class AppCameraController extends SintController implements AppCameraService {
 
   @override
   void onClose() {
+    mounted = false;
     super.onClose();
     controller?.dispose();
   }
