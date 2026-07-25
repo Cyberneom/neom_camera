@@ -1,3 +1,6 @@
+## [2026-07-25] - Dependencias Externas
+- Actualizacion de dependencias externas a sus versiones mas recientes y compatibles.
+
 
 ## [2.0.0-unreleased] - 2026-07-21
 - Refactor and compatibility updates for app_camera_controller.dart.

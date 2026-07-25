@@ -19,8 +19,8 @@ dependencies:
     git:
       url: git@github.com:Cyberneom/neom_commons.git
 
-  camera: ^0.11.1
-  image: ^4.1.7
+  camera: ^0.12.0+2
+  image: ^4.9.1
 
   # For horizontal flip of front camera videos
   easy_video_editor: ^0.1.2
