@@ -14,10 +14,10 @@ dependencies:
 
   neom_core:
     git:
-      url: git@github.com:Cyberneom/neom_core.git
+      url: git@github.com:Open-Neom/neom_core.git
   neom_commons:
     git:
-      url: git@github.com:Cyberneom/neom_commons.git
+      url: git@github.com:Open-Neom/neom_commons.git
 
   camera: ^0.12.0+2
   image: ^4.9.1
