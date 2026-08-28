@@ -21,6 +21,8 @@ analyzer:
     invalid_use_of_visible_for_testing_member: ignore # <- Disable the analyzer rule.
     use_build_context_synchronously: ignore
     no_wildcard_variable_uses: ignore
+  exclude:
+    - build/**
 
 linter:
   # The lint rules applied to this project can be customized in the
