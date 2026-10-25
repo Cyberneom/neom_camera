@@ -1,130 +1,207 @@
+import 'dart:math' as math;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
-/// Data class representing 21 detected hand landmarks from raw camera frames.
+/// Estimated hand pose. This fallback emits an articulated template around a
+/// chroma cluster; it does not observe individual fingers or measure depth.
 class VrHandLandmarkData {
   final List<vm.Vector3> landmarks;
   final bool isRightHand;
   final double confidence;
   final DateTime timestamp;
+  final bool isEstimated;
 
   const VrHandLandmarkData({
     required this.landmarks,
     required this.isRightHand,
-    this.confidence = 0.92,
+    this.confidence = 0.35,
     required this.timestamp,
+    this.isEstimated = true,
   });
 }
 
-/// Real-time computer vision optical hand tracker for VR.
-///
-/// Processes raw camera frames (YUV420 / BGRA) directly from [VrVisionStreamService],
-/// detecting hand skin-tone clusters, wrist anchor, palm center, and 5 finger extension
-/// vectors to generate standard 21-point [VrHandLandmarkData] frames.
+/// Bounded, allocation-light chroma heuristic for optional optical feedback.
+/// This is not a MediaPipe/OpenXR detector: all 21 points are a pose template.
+/// Use an actual native landmark model for finger gestures and safety-critical
+/// interaction. No full-resolution RGB conversion or image copy is performed.
 class VrOpticalHandTracker {
   bool _isProcessing = false;
-  int _lastProcessTimeMs = 0;
+  bool _hadHand = false;
+  int? _lastProcessTimeUs;
+  final Stopwatch _clock = Stopwatch()..start();
+  final int Function()? _monotonicMicroseconds;
 
-  /// Target maximum inference rate (e.g. 30 FPS = ~33ms interval) to keep UI thread fluid.
+  /// A separate analysis budget from the display refresh rate (default 15 Hz).
   final int minFrameIntervalMs;
 
-  /// Callback when a valid hand is detected and landmarked.
+  /// Maximum samples examined per frame, regardless of sensor resolution.
+  final int maxSamples;
   void Function(VrHandLandmarkData frame)? onHandDetected;
-
-  /// Callback when no hand is present in the camera viewport.
   VoidCallback? onHandLost;
 
+  int processedFrames = 0;
+  int droppedFrames = 0;
+  int lastAnalysisMicroseconds = 0;
+
   VrOpticalHandTracker({
-    this.minFrameIntervalMs = 33,
+    this.minFrameIntervalMs = 66,
+    this.maxSamples = 3072,
     this.onHandDetected,
     this.onHandLost,
-  });
+    @visibleForTesting int Function()? monotonicMicroseconds,
+  }) : assert(minFrameIntervalMs >= 0),
+       assert(maxSamples > 0),
+       _monotonicMicroseconds = monotonicMicroseconds;
 
-  /// Processes a single [CameraImage] frame from the camera stream.
   void processFrame(CameraImage image) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (_isProcessing || (now - _lastProcessTimeMs) < minFrameIntervalMs) {
+    final now = _monotonicMicroseconds?.call() ?? _clock.elapsedMicroseconds;
+    final last = _lastProcessTimeUs;
+    if (_isProcessing ||
+        (last != null && now - last < minFrameIntervalMs * 1000)) {
+      droppedFrames++;
       return;
     }
-
     _isProcessing = true;
-    _lastProcessTimeMs = now;
-
+    _lastProcessTimeUs = now;
+    final analysisClock = Stopwatch()..start();
     try {
       final frame = _extractHandLandmarks(image);
+      processedFrames++;
       if (frame != null) {
+        _hadHand = true;
         onHandDetected?.call(frame);
-      } else {
+      } else if (_hadHand) {
+        _hadHand = false;
+        // A room without a visible hand should not trigger UI/state work on
+        // every camera frame. Only report the transition to lost.
         onHandLost?.call();
       }
-    } catch (e) {
-      debugPrint('[VrOpticalHandTracker] Frame analysis error: $e');
+    } catch (error) {
+      debugPrint('[VrOpticalHandTracker] Frame analysis error: $error');
     } finally {
+      lastAnalysisMicroseconds = analysisClock.elapsedMicroseconds;
       _isProcessing = false;
     }
   }
 
-  /// Extracts 21 OpenXR/MediaPipe landmarks from YUV420 image buffers.
+  /// Clears temporal state when switching camera, lens, or scene.
+  void reset() {
+    _hadHand = false;
+    _lastProcessTimeUs = null;
+  }
+
   VrHandLandmarkData? _extractHandLandmarks(CameraImage image) {
-    if (image.planes.isEmpty) return null;
-
-    final int width = image.width;
-    final int height = image.height;
-    final Uint8List yPlane = image.planes[0].bytes;
-
-    // We search the lower-middle and forward area of the camera frame
-    int skinPixelCount = 0;
-    double sumX = 0;
-    double sumY = 0;
-    int minY = height;
-    int maxY = 0;
-    int minX = width;
-    int maxX = 0;
-
-    // Subsample step for high-speed analysis (< 2ms per frame)
-    const step = 4;
-    for (int y = 0; y < height; y += step) {
-      final rowOffset = y * width;
-      for (int x = 0; x < width; x += step) {
-        final lum = yPlane[rowOffset + x];
-
-        // Skin luminance heuristic under typical room & screen glow lighting
-        if (lum > 60 && lum < 220) {
-          skinPixelCount++;
-          sumX += x;
-          sumY += y;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-
-    // Hand presence threshold: require minimum bounding cluster
-    final minClusterSize = (width * height) ~/ (step * step * 40);
-    if (skinPixelCount < minClusterSize) {
+    final width = image.width;
+    final height = image.height;
+    if (width <= 0 || height <= 0 || image.planes.isEmpty || maxSamples <= 0) {
       return null;
     }
-
-    final double centerX = (sumX / skinPixelCount) / width;
-    final double centerY = (sumY / skinPixelCount) / height;
-
-    // Estimated distance based on hand cluster coverage (closer = larger area)
-    final clusterWidthNorm = (maxX - minX) / width;
-    final double estimatedZ = (0.75 - clusterWidthNorm * 0.9).clamp(0.20, 0.85);
-
-    // Handedness heuristic: center on left of screen = left hand, right = right hand
+    final yuv = image.format.group == ImageFormatGroup.yuv420;
+    final bgra = image.format.group == ImageFormatGroup.bgra8888;
+    // Y-only images cannot distinguish skin from an ordinary illuminated wall.
+    if ((!yuv && !bgra) || (yuv && image.planes.length < 2)) return null;
+    final first = image.planes.first;
+    final columns = math.max(
+      1,
+      math.min(
+        maxSamples,
+        math.min(width, math.sqrt(maxSamples * width / height).floor()),
+      ),
+    );
+    final rows = math.max(1, math.min(height, maxSamples ~/ columns));
+    int skinCount = 0;
+    int sampledCount = 0;
+    double sumX = 0;
+    double sumY = 0;
+    int minX = width;
+    int maxX = 0;
+    int minY = height;
+    int maxY = 0;
+    // Offset each sample into its cell. Neither row nor pixel strides can be
+    // inferred from the image width (YUV chroma planes may be interleaved).
+    for (var row = 0; row < rows; row++) {
+      final y = ((row + 0.5) * height / rows).floor();
+      for (var column = 0; column < columns; column++) {
+        final x = ((column + 0.5) * width / columns).floor();
+        int luminance;
+        int cb;
+        int cr;
+        if (bgra) {
+          final offset = y * first.bytesPerRow + x * (first.bytesPerPixel ?? 4);
+          if (offset < 0 || offset + 2 >= first.bytes.length) continue;
+          final blue = first.bytes[offset];
+          final green = first.bytes[offset + 1];
+          final red = first.bytes[offset + 2];
+          luminance = (77 * red + 150 * green + 29 * blue) >> 8;
+          cb = 128 + ((-43 * red - 85 * green + 128 * blue) >> 8);
+          cr = 128 + ((128 * red - 107 * green - 21 * blue) >> 8);
+        } else {
+          final offset = y * first.bytesPerRow + x * (first.bytesPerPixel ?? 1);
+          if (offset < 0 || offset >= first.bytes.length) continue;
+          luminance = first.bytes[offset];
+          final u = image.planes[1];
+          final cx = x ~/ 2;
+          final cy = y ~/ 2;
+          if (image.planes.length >= 3) {
+            final v = image.planes[2];
+            final uOffset = cy * u.bytesPerRow + cx * (u.bytesPerPixel ?? 1);
+            final vOffset = cy * v.bytesPerRow + cx * (v.bytesPerPixel ?? 1);
+            if (uOffset < 0 ||
+                uOffset >= u.bytes.length ||
+                vOffset < 0 ||
+                vOffset >= v.bytes.length) {
+              continue;
+            }
+            cb = u.bytes[uOffset];
+            cr = v.bytes[vOffset];
+          } else {
+            // iOS 420 bi-planar UV. NV21 has a different format and is rejected.
+            final offset = cy * u.bytesPerRow + cx * (u.bytesPerPixel ?? 2);
+            if (offset < 0 || offset + 1 >= u.bytes.length) continue;
+            cb = u.bytes[offset];
+            cr = u.bytes[offset + 1];
+          }
+        }
+        sampledCount++;
+        if (luminance < 40 ||
+            luminance > 235 ||
+            cb < 77 ||
+            cb > 127 ||
+            cr < 133 ||
+            cr > 173) {
+          continue;
+        }
+        skinCount++;
+        sumX += x;
+        sumY += y;
+        minX = math.min(minX, x);
+        maxX = math.max(maxX, x);
+        minY = math.min(minY, y);
+        maxY = math.max(maxY, y);
+      }
+    }
+    if (sampledCount < 16 || skinCount < math.max(8, sampledCount ~/ 40)) {
+      return null;
+    }
+    // Reject a near-full-frame skin-colored surface; this remains a heuristic,
+    // not a calibrated skin, body, or obstacle detector.
+    if (skinCount / sampledCount > 0.60 || maxX <= minX || maxY <= minY) {
+      return null;
+    }
+    final centerX = sumX / skinCount / width;
+    final centerY = sumY / skinCount / height;
+    final estimatedZ = (0.75 - (maxX - minX) / width * 0.9).clamp(0.20, 0.85);
     final isRightHand = centerX > 0.5;
-
-    // Synthesize the 21 MediaPipe hand landmarks rooted at wrist and palm
-    final landmarks = _buildArticulatedLandmarks(centerX, centerY, estimatedZ, isRightHand);
-
     return VrHandLandmarkData(
-      landmarks: landmarks,
+      landmarks: _buildArticulatedLandmarks(
+        centerX,
+        centerY,
+        estimatedZ,
+        isRightHand,
+      ),
       isRightHand: isRightHand,
-      confidence: 0.92,
       timestamp: DateTime.now(),
     );
   }
