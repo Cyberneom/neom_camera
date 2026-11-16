@@ -44,7 +44,8 @@ class VrOpticalHandTracker {
   /// Processes a single [CameraImage] frame from the camera stream.
   void processFrame(CameraImage image) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (_isProcessing || (now - _lastProcessTimeMs) < minFrameIntervalMs) {
+    final safeInterval = minFrameIntervalMs < 0 ? 0 : minFrameIntervalMs;
+    if (_isProcessing || (now - _lastProcessTimeMs) < safeInterval) {
       return;
     }
 
@@ -65,15 +66,33 @@ class VrOpticalHandTracker {
     }
   }
 
-  /// Extracts 21 OpenXR/MediaPipe landmarks from YUV420 image buffers.
+  /// Extracts 21 OpenXR/MediaPipe landmarks from YUV420 / BGRA image buffers.
   VrHandLandmarkData? _extractHandLandmarks(CameraImage image) {
     if (image.planes.isEmpty) return null;
+    final plane = image.planes[0];
+    return extractHandLandmarksFromLumaPlane(
+      bytes: plane.bytes,
+      width: image.width,
+      height: image.height,
+      bytesPerRow: plane.bytesPerRow,
+      bytesPerPixel: plane.bytesPerPixel ?? 1,
+    );
+  }
 
-    final int width = image.width;
-    final int height = image.height;
-    final Uint8List yPlane = image.planes[0].bytes;
+  /// Stride-aware, bounds-checked luma plane analyzer (safe against padded
+  /// Camera2/AVFoundation row strides, truncated buffers, and zero dimensions).
+  static VrHandLandmarkData? extractHandLandmarksFromLumaPlane({
+    required Uint8List bytes,
+    required int width,
+    required int height,
+    required int bytesPerRow,
+    int bytesPerPixel = 1,
+  }) {
+    if (width <= 0 || height <= 0 || bytes.isEmpty) return null;
+    final safeBpp = bytesPerPixel < 1 ? 1 : bytesPerPixel;
+    final safeStride =
+        bytesPerRow >= width * safeBpp ? bytesPerRow : width * safeBpp;
 
-    // We search the lower-middle and forward area of the camera frame
     int skinPixelCount = 0;
     double sumX = 0;
     double sumY = 0;
@@ -85,9 +104,12 @@ class VrOpticalHandTracker {
     // Subsample step for high-speed analysis (< 2ms per frame)
     const step = 4;
     for (int y = 0; y < height; y += step) {
-      final rowOffset = y * width;
+      final rowOffset = y * safeStride;
+      if (rowOffset >= bytes.length) break;
       for (int x = 0; x < width; x += step) {
-        final lum = yPlane[rowOffset + x];
+        final idx = rowOffset + x * safeBpp;
+        if (idx >= bytes.length) break;
+        final lum = bytes[idx];
 
         // Skin luminance heuristic under typical room & screen glow lighting
         if (lum > 60 && lum < 220) {
@@ -103,23 +125,28 @@ class VrOpticalHandTracker {
     }
 
     // Hand presence threshold: require minimum bounding cluster
-    final minClusterSize = (width * height) ~/ (step * step * 40);
+    final rawThreshold = (width * height) ~/ (step * step * 40);
+    final minClusterSize = rawThreshold < 1 ? 1 : rawThreshold;
     if (skinPixelCount < minClusterSize) {
       return null;
     }
 
-    final double centerX = (sumX / skinPixelCount) / width;
-    final double centerY = (sumY / skinPixelCount) / height;
+    final double centerX = ((sumX / skinPixelCount) / width).clamp(0.0, 1.0);
+    final double centerY = ((sumY / skinPixelCount) / height).clamp(0.0, 1.0);
 
     // Estimated distance based on hand cluster coverage (closer = larger area)
-    final clusterWidthNorm = (maxX - minX) / width;
+    final clusterWidthNorm = ((maxX - minX) / width).clamp(0.0, 1.0);
     final double estimatedZ = (0.75 - clusterWidthNorm * 0.9).clamp(0.20, 0.85);
 
     // Handedness heuristic: center on left of screen = left hand, right = right hand
     final isRightHand = centerX > 0.5;
 
-    // Synthesize the 21 MediaPipe hand landmarks rooted at wrist and palm
-    final landmarks = _buildArticulatedLandmarks(centerX, centerY, estimatedZ, isRightHand);
+    final landmarks = _buildArticulatedLandmarks(
+      centerX,
+      centerY,
+      estimatedZ,
+      isRightHand,
+    );
 
     return VrHandLandmarkData(
       landmarks: landmarks,
@@ -130,7 +157,7 @@ class VrOpticalHandTracker {
   }
 
   /// Builds 21 landmarks formatted according to MediaPipe standard.
-  List<vm.Vector3> _buildArticulatedLandmarks(
+  static List<vm.Vector3> _buildArticulatedLandmarks(
     double cx,
     double cy,
     double cz,

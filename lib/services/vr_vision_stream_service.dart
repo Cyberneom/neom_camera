@@ -18,6 +18,8 @@ class VrVisionStreamConfig {
     this.preferUltraWide = true,
     this.frameDecimation = 1,
   });
+
+  int get effectiveFrameDecimation => frameDecimation < 1 ? 1 : frameDecimation;
 }
 
 /// Headless background camera streaming service for VR Computer Vision & Hand Tracking.
@@ -39,9 +41,7 @@ class VrVisionStreamService {
   bool get isStreaming => _isStreaming;
   CameraController? get controller => _controller;
 
-  VrVisionStreamService({
-    this.config = const VrVisionStreamConfig(),
-  });
+  VrVisionStreamService({this.config = const VrVisionStreamConfig()});
 
   /// Initializes the optimal camera (Ultra-Wide 0.5x if available) and starts streaming.
   Future<bool> start() async {
@@ -70,22 +70,25 @@ class VrVisionStreamService {
       }
 
       // 2. Initialize CameraController in Headless Mode (no audio)
-      _controller = CameraController(
+      final createdController = CameraController(
         selectedCamera,
         config.resolution,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
+      _controller = createdController;
 
-      await _controller!.initialize();
+      await createdController.initialize();
 
       // 3. Set minimum zoom level (0.5x / 0.6x) to maximize FOV towards lap/chest
       if (config.preferUltraWide) {
         try {
-          final minZoom = await _controller!.getMinZoomLevel();
-          if (minZoom < 1.0) {
-            await _controller!.setZoomLevel(minZoom);
-            debugPrint('[VrVisionStreamService] Set Ultra-Wide Zoom: ${minZoom}x');
+          final minZoom = await createdController.getMinZoomLevel();
+          if (minZoom.isFinite && minZoom > 0 && minZoom < 1.0) {
+            await createdController.setZoomLevel(minZoom);
+            debugPrint(
+              '[VrVisionStreamService] Set Ultra-Wide Zoom: ${minZoom}x',
+            );
           }
         } catch (e) {
           debugPrint('[VrVisionStreamService] Zoom setting skipped: $e');
@@ -94,9 +97,10 @@ class VrVisionStreamService {
 
       // 4. Start Low-Latency Frame Stream
       _frameCounter = 0;
-      await _controller!.startImageStream((CameraImage image) {
+      final decimation = config.effectiveFrameDecimation;
+      await createdController.startImageStream((CameraImage image) {
         _frameCounter++;
-        if (_frameCounter % config.frameDecimation == 0) {
+        if (_frameCounter % decimation == 0) {
           if (!_imageStreamController.isClosed) {
             _imageStreamController.add(image);
           }
@@ -104,32 +108,46 @@ class VrVisionStreamService {
       });
 
       _isStreaming = true;
-      debugPrint('[VrVisionStreamService] Continuous VR vision streaming active at ${config.resolution}');
+      debugPrint(
+        '[VrVisionStreamService] Continuous VR vision streaming active at ${config.resolution}',
+      );
       return true;
     } catch (e, st) {
-      debugPrint('[VrVisionStreamService] Failed to start camera stream: $e\n$st');
+      debugPrint(
+        '[VrVisionStreamService] Failed to start camera stream: $e\n$st',
+      );
+      try {
+        await _controller?.dispose();
+      } catch (_) {}
+      _controller = null;
+      _isStreaming = false;
       return false;
     }
   }
 
   /// Stops streaming and releases hardware camera locks.
   Future<void> stop() async {
-    if (!_isStreaming) return;
+    if (!_isStreaming && _controller == null) return;
     try {
-      if (_controller != null && _controller!.value.isStreamingImages) {
+      if (_controller != null &&
+          _controller!.value.isInitialized &&
+          _controller!.value.isStreamingImages) {
         await _controller!.stopImageStream();
       }
       await _controller?.dispose();
-      _controller = null;
-      _isStreaming = false;
       debugPrint('[VrVisionStreamService] Vision streaming stopped');
     } catch (e) {
       debugPrint('[VrVisionStreamService] Error stopping camera: $e');
+    } finally {
+      _controller = null;
+      _isStreaming = false;
     }
   }
 
   void dispose() {
-    stop();
-    _imageStreamController.close();
+    unawaited(stop());
+    if (!_imageStreamController.isClosed) {
+      unawaited(_imageStreamController.close());
+    }
   }
 }

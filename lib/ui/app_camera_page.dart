@@ -96,7 +96,8 @@ class AppCameraPage extends StatelessWidget {
                       }
                     },
                     onLongPress: () {
-                      if ((controller.userServiceImpl.user.isVerified) &&
+                      if ((controller.userServiceImpl?.user.isVerified ??
+                              false) &&
                           controller.controller != null &&
                           controller.controller!.value.isInitialized &&
                           !controller.controller!.value.isRecordingVideo) {
@@ -104,7 +105,8 @@ class AppCameraPage extends StatelessWidget {
                       }
                     },
                     onLongPressEnd: (details) {
-                      if ((controller.userServiceImpl.user.isVerified) &&
+                      if ((controller.userServiceImpl?.user.isVerified ??
+                              false) &&
                           controller.controller != null &&
                           controller.controller!.value.isInitialized &&
                           controller.controller!.value.isRecordingVideo) {
