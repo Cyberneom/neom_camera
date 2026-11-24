@@ -18,9 +18,7 @@ dependencies:
   neom_commons:
     git:
       url: git@github.com:Open-Neom/neom_commons.git
-  sint:
-    git:
-      url: git@github.com:Open-Neom/sint.git
+  sint: ^2.3.0
 
   camera: ^0.12.2
 
